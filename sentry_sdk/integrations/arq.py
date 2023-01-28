@@ -21,9 +21,9 @@ except ImportError:
     raise DidNotEnable("Arq is not installed")
 
 if MYPY:
-    from typing import Any, Optional
+    from typing import Any, Dict, Optional
 
-    from sentry_sdk._types import EventProcessor, Event, Hint
+    from sentry_sdk._types import EventProcessor, Event, ExcInfo, Hint
 
     from arq.jobs import Job
     from arq.typing import WorkerCoroutine
@@ -71,7 +71,7 @@ def patch_enqueue_job():
         with hub.start_span(op=OP.QUEUE_SUBMIT_ARQ, description=function):
             return await old_enqueue_job(self, function, *args, **kwargs)
 
-    ArqRedis.enqueue_job = _sentry_enqueue_job
+    ArqRedis.enqueue_job = _sentry_enqueue_job  # type: ignore
 
 
 def patch_run_job():
@@ -99,11 +99,11 @@ def patch_run_job():
             with hub.start_transaction(transaction):
                 return await old_run_job(self, job_id, score)
 
-    Worker.run_job = _sentry_run_job
+    Worker.run_job = _sentry_run_job  # type: ignore
 
 
 def _capture_exception(exc_info):
-    # (ExcInfo) -> None
+    # type: (ExcInfo) -> None
     hub = Hub.current
 
     if hub.scope.transaction is not None:
@@ -122,7 +122,7 @@ def _capture_exception(exc_info):
 
 
 def _make_event_processor(ctx, *args, **kwargs):
-    # type: (dict, *Any, **Any) -> EventProcessor
+    # type: (Dict[Any, Any], *Any, **Any) -> EventProcessor
     def event_processor(event, hint):
         # type: (Event, Hint) -> Optional[Event]
 
@@ -156,7 +156,7 @@ def _make_event_processor(ctx, *args, **kwargs):
 def _wrap_coroutine(name, coroutine):
     # type: (str, WorkerCoroutine) -> WorkerCoroutine
     async def _sentry_coroutine(ctx, *args, **kwargs):
-        # type: (dict, *Any, **Any) -> Any
+        # type: (Dict[Any, Any], *Any, **Any) -> Any
         hub = Hub.current
         if hub.get_integration(ArqIntegration) is None:
             return await coroutine(*args, **kwargs)
@@ -174,10 +174,11 @@ def _wrap_coroutine(name, coroutine):
 
         return result
 
-    return _sentry_coroutine
+    return _sentry_coroutine  # type: ignore
 
 
 def patch_func():
+    # type: () -> None
     old_func = arq.worker.func
 
     def _sentry_func(*args, **kwargs):
@@ -191,7 +192,7 @@ def patch_func():
 
         if not getattr(func, "_sentry_is_patched", False):
             func.coroutine = _wrap_coroutine(func.name, func.coroutine)
-            func._sentry_is_patched = True
+            func._sentry_is_patched = True  # type: ignore
 
         return func
 
