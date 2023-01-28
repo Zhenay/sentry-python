@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - master
+      - ci
       - release/**
 
   pull_request:
@@ -45,65 +46,3 @@ jobs:
 
       - run: |
           python scripts/split-tox-gh-actions/split-tox-gh-actions.py --fail-on-changes
-
-  build_lambda_layer:
-    name: Build Package
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
-
-    steps:
-      - uses: actions/checkout@v2
-      - uses: actions/setup-python@v4
-        with:
-          python-version: 3.9
-      - name: Setup build cache
-        uses: actions/cache@v3
-        id: build_cache
-        with:
-          path: ${{ env.CACHED_BUILD_PATHS }}
-          key: ${{ env.BUILD_CACHE_KEY }}
-      - name: Build Packages
-        run: |
-          echo "Creating directory containing Python SDK Lambda Layer"
-          pip install virtualenv
-          # This will also trigger "make dist" that creates the Python packages
-          make aws-lambda-layer
-
-          echo "Saving SDK_VERSION for later"
-          export SDK_VERSION=$(grep "VERSION = " sentry_sdk/consts.py | cut -f3 -d' ' | tr -d '"')
-          echo "SDK_VERSION=$SDK_VERSION"
-          echo "SDK_VERSION=$SDK_VERSION" >> $GITHUB_ENV
-      - name: Upload Python AWS Lambda Layer
-        uses: getsentry/action-build-aws-lambda-extension@v1
-        with:
-          artifact_name: ${{ github.sha }}
-          zip_file_name: sentry-python-serverless-${{ env.SDK_VERSION }}.zip
-          build_cache_paths: ${{ env.CACHED_BUILD_PATHS }}
-          build_cache_key: ${{ env.BUILD_CACHE_KEY }}
-      - name: Upload Python Packages
-        uses: actions/upload-artifact@v3
-        with:
-          name: ${{ github.sha }}
-          path: |
-            dist/*
-
-  docs:
-    name: Build SDK API Doc
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
-
-    steps:
-      - uses: actions/checkout@v2
-      - uses: actions/setup-python@v4
-        with:
-          python-version: 3.9
-
-      - run: |
-          pip install virtualenv
-          make apidocs
-          cd docs/_build && zip -r gh-pages ./
-
-      - uses: actions/upload-artifact@v3.1.1
-        with:
-          name: ${{ github.sha }}
-          path: docs/_build/gh-pages.zip
